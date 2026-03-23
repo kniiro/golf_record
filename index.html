@@ -86,16 +86,20 @@
             selectedContact: null,
             selectedDistanceFeel: null,
             selectedPenalty: null,
+            selectedLie: null,
+            selectedSlope: null,
             remainingYards: '',
             memo: '',
             showMemo: false
         };
 
-        const CLUBS = ['1W', '3W', '5W', '4U', '5U', '5I', '6I', '7I', '8I', '9I', 'PW', 'AW', '50°', '56°', 'SW', 'PT'];
+        const CLUBS = ['1W', '3W', '5W', '4U', '5U', '5I', '6I', '7I', '8I', '9I', 'PW', '50°', '56°', 'PT'];
+        const LIES = ['フェアウェイ', 'ラフ', 'バンカー', 'グリーン'];
+        const SLOPES = ['平坦', 'つま先下がり', 'つま先上がり', '左足上がり', '左足下がり'];
         const DIRECTIONS = ['ストレート', '右プッシュ', 'スライス', '左ひっかけ', 'フック'];
         const CONTACTS = ['クリーン', 'トップ・チョロ', 'ダフリ', 'シャンク'];
         const DISTANCE_FEELS = ['適正', 'ショート', 'オーバー'];
-        const PENALTIES = ['なし', 'OB', 'ハザード', 'ワンペナ'];
+        const PENALTIES = ['なし', 'OB', 'ハザード', 'ワンペナ', '前4', '前3'];
 
         // --- Rendering ---
         function render() {
@@ -110,7 +114,7 @@
                 <div class="flex-1 p-6 flex flex-col justify-center gap-6">
                     <div class="text-center mb-8">
                         <h1 class="text-3xl font-bold text-teal-700">Golf Shot<br>Record</h1>
-                        <p class="text-[10px] text-gray-400 font-mono mt-1">ver 1.2</p>
+                        <p class="text-[10px] text-gray-400 font-mono mt-1">ver 1.4</p>
                     </div>
                     
                     <button onclick="document.getElementById('new-round-modal').classList.remove('hidden')" class="bg-teal-600 active:bg-teal-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg ring-offset-2 focus:ring-2 focus:ring-teal-500">
@@ -197,7 +201,21 @@
                         <section>
                             <label class="block text-xs font-bold text-gray-400 mb-2">クラブ</label>
                             <div class="grid grid-cols-5 gap-2">
-                                ${CLUBS.map(c => `<button onclick="state.selectedClub='${c}';render()" class="aspect-square flex items-center justify-center rounded-xl font-bold border-2 transition-all ${state.selectedClub === c ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${c}</button>`).join('')}
+                                ${CLUBS.map(c => `<button onclick="state.selectedClub='${c}';render()" class="aspect-square flex items-center justify-center rounded-xl font-bold border-2 transition-all ${state.selectedClub === c ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'} text-sm">${c}</button>`).join('')}
+                            </div>
+                        </section>
+
+                        <section>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">ライ</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                ${LIES.map(l => `<button onclick="state.selectedLie='${l}';render()" class="py-3 rounded-xl font-bold border-2 transition-all ${state.selectedLie === l ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${l}</button>`).join('')}
+                            </div>
+                        </section>
+
+                        <section>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">傾斜</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                ${SLOPES.map(s => `<button onclick="state.selectedSlope='${s}';render()" class="py-3 rounded-xl font-bold border-2 text-sm transition-all ${state.selectedSlope === s ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${s}</button>`).join('')}
                             </div>
                         </section>
 
@@ -289,6 +307,7 @@
                                                 <td class="p-3">${s.remaining_yards || '-'}</td>
                                                 <td class="p-3">${s.club}</td>
                                                 <td class="p-3 text-[10px] leading-tight text-gray-500">
+                                                    <span class="text-gray-800 font-bold">${s.lie || '-'}${s.slope ? ` / ${s.slope}` : ''}</span><br>
                                                     ${s.direction}<br>${s.contact}<br>${s.distance_feel}
                                                     ${s.penalty && s.penalty !== 'なし' ? `<br><span class="text-red-500 font-bold">${s.penalty}</span>` : ''}
                                                     ${s.memo ? `<br><span class="text-teal-600 italic">memo: ${s.memo}</span>` : ''}
@@ -324,7 +343,7 @@
         }
 
         function isReadyToRecord() {
-            return state.selectedClub && state.selectedDirection && state.selectedContact && state.selectedDistanceFeel;
+            return state.selectedClub && state.selectedLie && state.selectedSlope && state.selectedDirection && state.selectedContact && state.selectedDistanceFeel;
         }
 
         function recordShot() {
@@ -340,6 +359,8 @@
                 contact: state.selectedContact,
                 distance_feel: state.selectedDistanceFeel,
                 penalty: state.selectedPenalty || 'なし',
+                lie: state.selectedLie,
+                slope: state.selectedSlope,
                 memo: state.memo
             };
 
@@ -357,6 +378,8 @@
             state.selectedContact = null;
             state.selectedDistanceFeel = null;
             state.selectedPenalty = 'なし';
+            state.selectedLie = null;
+            state.selectedSlope = null;
             state.remainingYards = '';
             state.memo = '';
             state.showMemo = false;
@@ -376,7 +399,7 @@
             const round = db.rounds.find(r => r.round_id === id);
             if (!round) return;
 
-            const header = ['Date', 'Course', 'Hole', 'Par', 'Shot', 'RemainingYards', 'Club', 'Direction', 'Contact', 'DistanceFeel', 'Penalty', 'Memo'];
+            const header = ['Date', 'Course', 'Hole', 'Par', 'Shot', 'RemainingYards', 'Club', 'Lie', 'Slope', 'Direction', 'Contact', 'DistanceFeel', 'Penalty', 'Memo'];
             const escape = (str) => {
                 if (str === null || str === undefined) return '""';
                 return '"' + String(str).replace(/"/g, '""') + '"';
@@ -393,6 +416,8 @@
                         s.shot_num,
                         s.remaining_yards || '',
                         escape(s.club),
+                        escape(s.lie || ''),
+                        escape(s.slope || ''),
                         escape(s.direction),
                         escape(s.contact),
                         escape(s.distance_feel),
@@ -416,8 +441,8 @@
 
         // --- Initialize ---
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js?v=2')
-                .then(reg => {
+            navigator.serviceWorker.register('sw.js?v=4')
+                .then(reg => console.log('SW Registered'))
                 .catch(err => console.log('SW Error:', err));
         }
 
