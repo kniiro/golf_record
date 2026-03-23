@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ゴルフ1打記録</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GolfShot">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <style>
+        body { -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .btn-active { background-color: #2c7a7b !important; color: white !important; }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800">
+    <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col">
+        <!-- Views will be injected here -->
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-4 py-2 rounded-full text-sm font-medium opacity-0 transition-opacity pointer-events-none z-50">
+        記録しました
+    </div>
+
+    <script>
+        // --- Data Management ---
+        const DB_KEY = 'golf_record_db';
+        const MAX_ROUNDS = 50;
+
+        let db = JSON.parse(localStorage.getItem(DB_KEY)) || {
+            active_round_id: null,
+            rounds: []
+        };
+
+        function saveDB() {
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+        }
+
+        // --- View Switching ---
+        const app = document.getElementById('app');
+        let currentView = 'home';
+
+        function switchView(view) {
+            currentView = view;
+            render();
+            window.scrollTo(0, 0);
+        }
+
+        // --- Actions ---
+        function startNewRound(courseName, date) {
+            const round_id = new Date().toISOString();
+            const newRound = {
+                round_id: round_id,
+                date: date,
+                course_name: courseName,
+                holes: Array.from({length: 18}, (_, i) => ({
+                    hole_num: i + 1,
+                    par: 4,
+                    shots: []
+                }))
+            };
+            db.rounds.unshift(newRound); // FIFO: Add to front
+            if (db.rounds.length > MAX_ROUNDS) db.rounds.pop();
+            db.active_round_id = round_id;
+            saveDB();
+            state.currentHoleIndex = 0;
+            switchView('record');
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => toast.classList.add('opacity-0'), 2000);
+        }
+
+        // --- State ---
+        let state = {
+            currentHoleIndex: 0,
+            selectedClub: null,
+            selectedDirection: null,
+            selectedContact: null,
+            selectedDistanceFeel: null,
+            remainingYards: '',
+            memo: '',
+            showMemo: false
+        };
+
+        const CLUBS = ['1W', '3W', '5W', '4U', '5I', '6I', '7I', '8I', '9I', 'PW', 'AW', '50°', '56°', 'SW', 'PT'];
+        const DIRECTIONS = ['ストレート', '右プッシュ', 'スライス', '左ひっかけ', 'フック'];
+        const CONTACTS = ['クリーン', 'トップ・チョロ', 'ダフリ', 'シャンク'];
+        const DISTANCE_FEELS = ['適正', 'ショート', 'オーバー'];
+
+        // --- Rendering ---
+        function render() {
+            if (currentView === 'home') renderHome();
+            else if (currentView === 'record') renderRecord();
+            else if (currentView === 'history') renderHistory();
+        }
+
+        function renderHome() {
+            const activeRound = db.rounds.find(r => r.round_id === db.active_round_id);
+            app.innerHTML = `
+                <div class="flex-1 p-6 flex flex-col justify-center gap-6">
+                    <h1 class="text-3xl font-bold text-teal-700 text-center mb-8">Golf Shot<br>Record</h1>
+                    
+                    <button onclick="document.getElementById('new-round-modal').classList.remove('hidden')" class="bg-teal-600 active:bg-teal-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg ring-offset-2 focus:ring-2 focus:ring-teal-500">
+                        新しいラウンドを開始
+                    </button>
+
+                    ${db.active_round_id ? `
+                        <button onclick="switchView('record')" class="bg-white border-2 border-teal-600 text-teal-700 active:bg-teal-50 text-bold py-4 px-6 rounded-2xl shadow-md">
+                            進行中のラウンドを再開<br>
+                            <span class="text-xs font-normal text-gray-500">${activeRound ? activeRound.course_name : ''}</span>
+                        </button>
+                    ` : ''}
+
+                    <button onclick="switchView('history')" class="bg-gray-200 active:bg-gray-300 text-gray-700 font-bold py-4 px-6 rounded-2xl">
+                        過去の履歴とデータ出力
+                    </button>
+                </div>
+
+                <!-- Modal -->
+                <div id="new-round-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center p-6 hidden z-50">
+                    <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+                        <h2 class="text-xl font-bold mb-4">新規ラウンド設定</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-600 mb-1">日付</label>
+                                <input id="new-date" type="date" value="${new Date().toISOString().split('T')[0]}" class="w-full bg-gray-100 border-none rounded-xl p-3 focus:ring-2 focus:ring-teal-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-600 mb-1">コース名</label>
+                                <input id="new-course" type="text" placeholder="座間ゴルフ練習場" class="w-full bg-gray-100 border-none rounded-xl p-3 focus:ring-2 focus:ring-teal-500">
+                            </div>
+                        </div>
+                        <div class="flex gap-3 mt-8">
+                            <button onclick="document.getElementById('new-round-modal').classList.add('hidden')" class="flex-1 py-3 text-gray-500 font-bold">キャンセル</button>
+                            <button onclick="startNewRound(document.getElementById('new-course').value || '未設定コース', document.getElementById('new-date').value)" class="flex-1 py-3 bg-teal-600 text-white font-bold rounded-xl active:bg-teal-700">開始</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderRecord() {
+            const round = db.rounds.find(r => r.round_id === db.active_round_id);
+            if (!round) { switchView('home'); return; }
+            
+            const hole = round.holes[state.currentHoleIndex];
+            const currentShotNum = hole.shots.length + 1;
+
+            app.innerHTML = `
+                <header class="bg-white px-4 py-3 shadow-sm flex items-center justify-between sticky top-0 z-30">
+                    <button onclick="switchView('home')" class="text-teal-600 font-bold">終了</button>
+                    <h2 class="font-bold truncate max-w-[150px]">${round.course_name}</h2>
+                    <span class="text-sm font-bold bg-teal-100 text-teal-700 px-3 py-1 rounded-full">Hole ${hole.hole_num}</span>
+                </header>
+
+                <main class="p-4 flex-1 space-y-6 safe-bottom">
+                    <!-- Hole Control -->
+                    <div class="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm">
+                        <div class="flex items-center gap-3">
+                            <button onclick="changeHole(-1)" class="w-10 h-10 rounded-full bg-gray-100 active:bg-gray-200 flex items-center justify-center text-xl font-bold">←</button>
+                            <span class="font-black text-xl w-14 text-center">H${hole.hole_num}</span>
+                            <button onclick="changeHole(1)" class="w-10 h-10 rounded-full bg-gray-100 active:bg-gray-200 flex items-center justify-center text-xl font-bold">→</button>
+                        </div>
+                        <div class="flex gap-1 bg-gray-100 p-1 rounded-xl">
+                            ${[3,4,5].map(p => `
+                                <button onclick="setPar(${p})" class="px-4 py-1 rounded-lg text-sm font-bold ${hole.par === p ? 'bg-white shadow text-teal-600' : 'text-gray-400'}">Par${p}</button>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Shot Stats -->
+                    <div class="text-center">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">NEXT SHOT</h3>
+                        <p class="text-5xl font-black text-teal-600 mt-1">${currentShotNum}<span class="text-xl"> 打目</span></p>
+                    </div>
+
+                    <!-- Input Grid -->
+                    <div class="space-y-4">
+                        <section>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">残りヤード (任意)</label>
+                            <input type="number" value="${state.remainingYards}" oninput="state.remainingYards = this.value" placeholder="150" class="w-full bg-white border-none rounded-xl p-4 text-xl font-bold text-center shadow-sm">
+                        </section>
+
+                        <section>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">クラブ</label>
+                            <div class="grid grid-cols-5 gap-2">
+                                ${CLUBS.map(c => `<button onclick="state.selectedClub='${c}';render()" class="aspect-square flex items-center justify-center rounded-xl font-bold border-2 transition-all ${state.selectedClub === c ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${c}</button>`).join('')}
+                            </div>
+                        </section>
+
+                        <section>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">方向・軌道</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                ${DIRECTIONS.map(d => `<button onclick="state.selectedDirection='${d}';render()" class="py-3 rounded-xl font-bold border-2 transition-all ${state.selectedDirection === d ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${d}</button>`).join('')}
+                            </div>
+                        </section>
+
+                        <section>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">打点</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                ${CONTACTS.map(c => `<button onclick="state.selectedContact='${c}';render()" class="py-3 rounded-xl font-bold border-2 transition-all ${state.selectedContact === c ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${c}</button>`).join('')}
+                            </div>
+                        </section>
+
+                        <section>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">距離感</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                ${DISTANCE_FEELS.map(f => `<button onclick="state.selectedDistanceFeel='${f}';render()" class="py-3 rounded-xl font-bold border-2 transition-all ${state.selectedDistanceFeel === f ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${f}</button>`).join('')}
+                            </div>
+                        </section>
+
+                        <section>
+                            <button onclick="state.showMemo = !state.showMemo; render()" class="w-full text-center py-2 text-teal-600 text-sm font-bold">+ メモを追加</button>
+                            ${state.showMemo ? `<textarea oninput="state.memo = this.value" class="w-full bg-white border-none rounded-xl p-4 mt-2 shadow-sm focus:ring-2 focus:ring-teal-500" placeholder="状況や意識したこと">${state.memo}</textarea>` : ''}
+                        </section>
+                    </div>
+
+                    <!-- Record Button -->
+                    <div class="pt-4">
+                        <button id="record-btn" onclick="recordShot()" ${isReadyToRecord() ? '' : 'disabled'} class="w-full py-5 rounded-2xl font-black text-xl shadow-lg transition-all ${isReadyToRecord() ? 'bg-teal-600 text-white active:scale-95' : 'bg-gray-300 text-gray-500'}">
+                            記 録
+                        </button>
+                    </div>
+                </main>
+            `;
+        }
+
+        function renderHistory() {
+            const rounds = db.rounds;
+            const currentHistoryId = state.historyId || (rounds.length > 0 ? rounds[0].round_id : null);
+            const selectedRound = rounds.find(r => r.round_id === currentHistoryId);
+
+            app.innerHTML = `
+                <header class="bg-white px-4 py-3 shadow-sm flex items-center justify-between sticky top-0 z-30">
+                    <button onclick="switchView('home')" class="text-teal-600 font-bold">戻る</button>
+                    <h2 class="font-bold">履歴と出力</h2>
+                    <div class="w-10"></div>
+                </header>
+
+                <main class="p-4 space-y-6">
+                    ${rounds.length === 0 ? '<p class="text-center text-gray-500 pt-10">履歴はありません</p>' : `
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">ラウンドを選択</label>
+                            <select onchange="state.historyId = this.value; render()" class="w-full bg-white border-none rounded-xl p-4 shadow-sm font-bold">
+                                ${rounds.map(r => `<option value="${r.round_id}" ${currentHistoryId === r.round_id ? 'selected' : ''}>${r.date} - ${r.course_name}</option>`).join('')}
+                            </select>
+                        </div>
+
+                        ${selectedRound ? `
+                            <div class="flex gap-2">
+                                <button onclick="downloadCSV('${selectedRound.round_id}')" class="flex-1 bg-teal-600 text-white font-bold py-3 rounded-xl shadow-sm">CSV出力</button>
+                                <button onclick="deleteRound('${selectedRound.round_id}')" class="bg-red-50 text-red-600 font-bold px-4 rounded-xl">削除</button>
+                            </div>
+
+                            <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+                                <table class="w-full text-xs text-left">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="p-3">H/S</th>
+                                            <th class="p-3">Yard</th>
+                                            <th class="p-3">Club</th>
+                                            <th class="p-3">方向/打点/感</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">
+                                        ${selectedRound.holes.flatMap(h => h.shots.map(s => `
+                                            <tr class="bg-white">
+                                                <td class="p-3 font-bold">H${h.hole_num}-${s.shot_num}</td>
+                                                <td class="p-3">${s.remaining_yards || '-'}</td>
+                                                <td class="p-3">${s.club}</td>
+                                                <td class="p-3 text-[10px] leading-tight text-gray-500">
+                                                    ${s.direction}<br>${s.contact}<br>${s.distance_feel}
+                                                    ${s.memo ? `<br><span class="text-teal-600 italic">memo: ${s.memo}</span>` : ''}
+                                                </td>
+                                            </tr>
+                                        `)).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : ''}
+                    `}
+                </main>
+            `;
+        }
+
+        // --- View Logic Helpers ---
+        function changeHole(delta) {
+            const nextIdx = state.currentHoleIndex + delta;
+            if (nextIdx >= 0 && nextIdx < 18) {
+                state.currentHoleIndex = nextIdx;
+                resetInputState();
+                render();
+            }
+        }
+
+        function setPar(p) {
+            const round = db.rounds.find(r => r.round_id === db.active_round_id);
+            if (round) {
+                round.holes[state.currentHoleIndex].par = p;
+                saveDB();
+                render();
+            }
+        }
+
+        function isReadyToRecord() {
+            return state.selectedClub && state.selectedDirection && state.selectedContact && state.selectedDistanceFeel;
+        }
+
+        function recordShot() {
+            if (!isReadyToRecord()) return;
+            const round = db.rounds.find(r => r.round_id === db.active_round_id);
+            const hole = round.holes[state.currentHoleIndex];
+            
+            const newShot = {
+                shot_num: hole.shots.length + 1,
+                remaining_yards: state.remainingYards,
+                club: state.selectedClub,
+                direction: state.selectedDirection,
+                contact: state.selectedContact,
+                distance_feel: state.selectedDistanceFeel,
+                memo: state.memo
+            };
+
+            hole.shots.push(newShot);
+            saveDB();
+            resetInputState();
+            showToast('記録しました (' + hole.shots.length + '打目)');
+            render();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function resetInputState() {
+            state.selectedClub = null;
+            state.selectedDirection = null;
+            state.selectedContact = null;
+            state.selectedDistanceFeel = null;
+            state.remainingYards = '';
+            state.memo = '';
+            state.showMemo = false;
+        }
+
+        function deleteRound(id) {
+            if (confirm('このラウンド記録を削除しますか？')) {
+                db.rounds = db.rounds.filter(r => r.round_id !== id);
+                if (db.active_round_id === id) db.active_round_id = null;
+                saveDB();
+                state.historyId = null;
+                render();
+            }
+        }
+
+        function downloadCSV(id) {
+            const round = db.rounds.find(r => r.round_id === id);
+            if (!round) return;
+
+            const header = ['Date', 'Course', 'Hole', 'Par', 'Shot', 'RemainingYards', 'Club', 'Direction', 'Contact', 'DistanceFeel', 'Memo'];
+            const escape = (str) => {
+                if (str === null || str === undefined) return '""';
+                return '"' + String(str).replace(/"/g, '""') + '"';
+            };
+
+            const rows = [header.join(',')];
+            round.holes.forEach(h => {
+                h.shots.forEach(s => {
+                    const row = [
+                        escape(round.date),
+                        escape(round.course_name),
+                        h.hole_num,
+                        h.par,
+                        s.shot_num,
+                        s.remaining_yards || '',
+                        escape(s.club),
+                        escape(s.direction),
+                        escape(s.contact),
+                        escape(s.distance_feel),
+                        escape(s.memo || '')
+                    ];
+                    rows.push(row.join(','));
+                });
+            });
+
+            const csvContent = rows.join('\n');
+            const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+            const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `golf_record_${round.date}_${round.course_name}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // --- Initialize ---
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('SW Registered'))
+                .catch(err => console.log('SW Error:', err));
+        }
+
+        render();
+    </script>
+</body>
+</html>
