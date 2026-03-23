@@ -110,7 +110,7 @@
                 <div class="flex-1 p-6 flex flex-col justify-center gap-6">
                     <div class="text-center mb-8">
                         <h1 class="text-3xl font-bold text-teal-700">Golf Shot<br>Record</h1>
-                        <p class="text-[10px] text-gray-400 font-mono mt-1">ver 1.1</p>
+                        <p class="text-[10px] text-gray-400 font-mono mt-1">ver 1.2</p>
                     </div>
                     
                     <button onclick="document.getElementById('new-round-modal').classList.remove('hidden')" class="bg-teal-600 active:bg-teal-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg ring-offset-2 focus:ring-2 focus:ring-teal-500">
@@ -416,8 +416,8 @@
 
         // --- Initialize ---
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js')
-                .then(reg => console.log('SW Registered'))
+            navigator.serviceWorker.register('sw.js?v=2')
+                .then(reg => {
                 .catch(err => console.log('SW Error:', err));
         }
 
