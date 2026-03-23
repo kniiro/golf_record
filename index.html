@@ -85,15 +85,17 @@
             selectedDirection: null,
             selectedContact: null,
             selectedDistanceFeel: null,
+            selectedPenalty: null,
             remainingYards: '',
             memo: '',
             showMemo: false
         };
 
-        const CLUBS = ['1W', '3W', '5W', '4U', '5I', '6I', '7I', '8I', '9I', 'PW', 'AW', '50°', '56°', 'SW', 'PT'];
+        const CLUBS = ['1W', '3W', '5W', '4U', '5U', '5I', '6I', '7I', '8I', '9I', 'PW', 'AW', '50°', '56°', 'SW', 'PT'];
         const DIRECTIONS = ['ストレート', '右プッシュ', 'スライス', '左ひっかけ', 'フック'];
         const CONTACTS = ['クリーン', 'トップ・チョロ', 'ダフリ', 'シャンク'];
         const DISTANCE_FEELS = ['適正', 'ショート', 'オーバー'];
+        const PENALTIES = ['なし', 'OB', 'ハザード', 'ワンペナ'];
 
         // --- Rendering ---
         function render() {
@@ -218,6 +220,13 @@
                         </section>
 
                         <section>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">ペナルティ</label>
+                            <div class="grid grid-cols-4 gap-2">
+                                ${PENALTIES.map(p => `<button onclick="state.selectedPenalty='${p}';render()" class="py-3 rounded-xl font-bold border-2 text-xs transition-all ${state.selectedPenalty === p ? 'border-red-600 bg-red-600 text-white' : 'bg-white border-transparent shadow-sm'}">${p}</button>`).join('')}
+                            </div>
+                        </section>
+
+                        <section>
                             <button onclick="state.showMemo = !state.showMemo; render()" class="w-full text-center py-2 text-teal-600 text-sm font-bold">+ メモを追加</button>
                             ${state.showMemo ? `<textarea oninput="state.memo = this.value" class="w-full bg-white border-none rounded-xl p-4 mt-2 shadow-sm focus:ring-2 focus:ring-teal-500" placeholder="状況や意識したこと">${state.memo}</textarea>` : ''}
                         </section>
@@ -278,6 +287,7 @@
                                                 <td class="p-3">${s.club}</td>
                                                 <td class="p-3 text-[10px] leading-tight text-gray-500">
                                                     ${s.direction}<br>${s.contact}<br>${s.distance_feel}
+                                                    ${s.penalty && s.penalty !== 'なし' ? `<br><span class="text-red-500 font-bold">${s.penalty}</span>` : ''}
                                                     ${s.memo ? `<br><span class="text-teal-600 italic">memo: ${s.memo}</span>` : ''}
                                                 </td>
                                             </tr>
@@ -326,6 +336,7 @@
                 direction: state.selectedDirection,
                 contact: state.selectedContact,
                 distance_feel: state.selectedDistanceFeel,
+                penalty: state.selectedPenalty || 'なし',
                 memo: state.memo
             };
 
@@ -342,6 +353,7 @@
             state.selectedDirection = null;
             state.selectedContact = null;
             state.selectedDistanceFeel = null;
+            state.selectedPenalty = 'なし';
             state.remainingYards = '';
             state.memo = '';
             state.showMemo = false;
@@ -361,7 +373,7 @@
             const round = db.rounds.find(r => r.round_id === id);
             if (!round) return;
 
-            const header = ['Date', 'Course', 'Hole', 'Par', 'Shot', 'RemainingYards', 'Club', 'Direction', 'Contact', 'DistanceFeel', 'Memo'];
+            const header = ['Date', 'Course', 'Hole', 'Par', 'Shot', 'RemainingYards', 'Club', 'Direction', 'Contact', 'DistanceFeel', 'Penalty', 'Memo'];
             const escape = (str) => {
                 if (str === null || str === undefined) return '""';
                 return '"' + String(str).replace(/"/g, '""') + '"';
@@ -381,6 +393,7 @@
                         escape(s.direction),
                         escape(s.contact),
                         escape(s.distance_feel),
+                        escape(s.penalty || 'なし'),
                         escape(s.memo || '')
                     ];
                     rows.push(row.join(','));
