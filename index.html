@@ -90,14 +90,15 @@
             selectedSlope: null,
             remainingYards: '',
             memo: '',
-            showMemo: false
+            showMemo: false,
+            editingShotIndex: null // null if new shot, index (0+) if editing
         };
 
         const CLUBS = ['1W', '3W', '5W', '4U', '5U', '5I', '6I', '7I', '8I', '9I', 'PW', '50°', '56°', 'PT'];
         const LIES = ['フェアウェイ', 'ラフ', 'バンカー', 'グリーン'];
         const SLOPES = ['平坦', 'つま先下がり', 'つま先上がり', '左足上がり', '左足下がり'];
         const DIRECTIONS = ['ストレート', '右プッシュ', 'スライス', '左ひっかけ', 'フック'];
-        const CONTACTS = ['クリーン', 'トップ・チョロ', 'ダフリ', 'シャンク'];
+        const CONTACTS = ['クリーン', 'トップ', 'チョロ', 'ダフリ', 'シャンク'];
         const DISTANCE_FEELS = ['適正', 'ショート', 'オーバー'];
         const PENALTIES = ['なし', 'OB', 'ハザード', 'ワンペナ', '前4', '前3'];
 
@@ -114,7 +115,7 @@
                 <div class="flex-1 p-6 flex flex-col justify-center gap-6">
                     <div class="text-center mb-8">
                         <h1 class="text-3xl font-bold text-teal-700">Golf Shot<br>Record</h1>
-                        <p class="text-[10px] text-gray-400 font-mono mt-1">ver 1.4</p>
+                        <p class="text-[10px] text-gray-400 font-mono mt-1">ver 1.5</p>
                     </div>
                     
                     <button onclick="document.getElementById('new-round-modal').classList.remove('hidden')" class="bg-teal-600 active:bg-teal-700 text-white font-bold py-4 px-6 rounded-2xl shadow-lg ring-offset-2 focus:ring-2 focus:ring-teal-500">
@@ -156,12 +157,46 @@
             `;
         }
 
+        function isFirstShot() {
+            const round = db.rounds.find(r => r.round_id === db.active_round_id);
+            if (!round) return false;
+            const hole = round.holes[state.currentHoleIndex];
+            return state.editingShotIndex === 0 || (state.editingShotIndex === null && hole.shots.length === 0);
+        }
+
+        function selectClub(club) {
+            state.selectedClub = club;
+            if (club === 'PT') {
+                state.selectedLie = 'グリーン';
+                state.selectedSlope = '平坦';
+                state.selectedDirection = 'ストレート';
+                state.selectedContact = 'クリーン';
+                state.selectedDistanceFeel = '適正';
+                state.selectedPenalty = 'なし';
+            }
+            render();
+        }
+
+        function selectLie(lie) {
+            state.selectedLie = lie;
+            if (lie === 'グリーン') {
+                state.selectedClub = 'PT';
+                state.selectedSlope = '平坦';
+                state.selectedDirection = 'ストレート';
+                state.selectedContact = 'クリーン';
+                state.selectedDistanceFeel = '適正';
+                state.selectedPenalty = 'なし';
+            }
+            render();
+        }
+
         function renderRecord() {
             const round = db.rounds.find(r => r.round_id === db.active_round_id);
             if (!round) { switchView('home'); return; }
             
             const hole = round.holes[state.currentHoleIndex];
             const currentShotNum = hole.shots.length + 1;
+            const firstShot = isFirstShot();
 
             app.innerHTML = `
                 <header class="bg-white px-4 py-3 shadow-sm flex items-center justify-between sticky top-0 z-30">
@@ -171,6 +206,12 @@
                 </header>
 
                 <main class="p-4 flex-1 space-y-6 safe-bottom">
+                    ${state.editingShotIndex !== null ? `
+                        <div class="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-center font-bold text-sm">
+                            ※現在 ${state.editingShotIndex + 1}打目を編集しています
+                        </div>
+                    ` : ''}
+
                     <!-- Hole Control -->
                     <div class="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm">
                         <div class="flex items-center gap-3">
@@ -187,8 +228,12 @@
 
                     <!-- Shot Stats -->
                     <div class="text-center">
-                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">NEXT SHOT</h3>
-                        <p class="text-5xl font-black text-teal-600 mt-1">${currentShotNum}<span class="text-xl"> 打目</span></p>
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                            ${state.editingShotIndex !== null ? 'EDITING SHOT' : 'NEXT SHOT'}
+                        </h3>
+                        <p class="text-5xl font-black text-teal-600 mt-1">
+                            ${state.editingShotIndex !== null ? state.editingShotIndex + 1 : currentShotNum}<span class="text-xl"> 打目</span>
+                        </p>
                     </div>
 
                     <!-- Input Grid -->
@@ -201,23 +246,29 @@
                         <section>
                             <label class="block text-xs font-bold text-gray-400 mb-2">クラブ</label>
                             <div class="grid grid-cols-5 gap-2">
-                                ${CLUBS.map(c => `<button onclick="state.selectedClub='${c}';render()" class="aspect-square flex items-center justify-center rounded-xl font-bold border-2 transition-all ${state.selectedClub === c ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'} text-sm">${c}</button>`).join('')}
+                                ${CLUBS.map(c => `<button onclick="selectClub('${c}')" class="aspect-square flex items-center justify-center rounded-xl font-bold border-2 transition-all ${state.selectedClub === c ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'} text-sm">${c}</button>`).join('')}
                             </div>
                         </section>
 
-                        <section>
-                            <label class="block text-xs font-bold text-gray-400 mb-2">ライ</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                ${LIES.map(l => `<button onclick="state.selectedLie='${l}';render()" class="py-3 rounded-xl font-bold border-2 transition-all ${state.selectedLie === l ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${l}</button>`).join('')}
+                        ${firstShot ? `
+                            <div class="bg-gray-50 border border-gray-200 text-gray-500 p-4 rounded-xl text-center text-xs">
+                                ※1打目はライ・傾斜の入力は不要です（ティー/平坦として自動記録されます）
                             </div>
-                        </section>
+                        ` : `
+                            <section>
+                                <label class="block text-xs font-bold text-gray-400 mb-2">ライ</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    ${LIES.map(l => `<button onclick="selectLie('${l}')" class="py-3 rounded-xl font-bold border-2 transition-all ${state.selectedLie === l ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${l}</button>`).join('')}
+                                </div>
+                            </section>
 
-                        <section>
-                            <label class="block text-xs font-bold text-gray-400 mb-2">傾斜</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                ${SLOPES.map(s => `<button onclick="state.selectedSlope='${s}';render()" class="py-3 rounded-xl font-bold border-2 text-sm transition-all ${state.selectedSlope === s ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${s}</button>`).join('')}
-                            </div>
-                        </section>
+                            <section>
+                                <label class="block text-xs font-bold text-gray-400 mb-2">傾斜</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    ${SLOPES.map(s => `<button onclick="state.selectedSlope='${s}';render()" class="py-3 rounded-xl font-bold border-2 text-sm transition-all ${state.selectedSlope === s ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${s}</button>`).join('')}
+                                </div>
+                            </section>
+                        `}
 
                         <section>
                             <label class="block text-xs font-bold text-gray-400 mb-2">方向・軌道</label>
@@ -228,8 +279,8 @@
 
                         <section>
                             <label class="block text-xs font-bold text-gray-400 mb-2">打点</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                ${CONTACTS.map(c => `<button onclick="state.selectedContact='${c}';render()" class="py-3 rounded-xl font-bold border-2 transition-all ${state.selectedContact === c ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${c}</button>`).join('')}
+                            <div class="grid grid-cols-3 gap-2">
+                                ${CONTACTS.map(c => `<button onclick="state.selectedContact='${c}';render()" class="py-3 rounded-xl font-bold border-2 text-sm transition-all ${state.selectedContact === c ? 'border-teal-600 bg-teal-600 text-white' : 'bg-white border-transparent shadow-sm'}">${c}</button>`).join('')}
                             </div>
                         </section>
 
@@ -254,11 +305,45 @@
                     </div>
 
                     <!-- Record Button -->
-                    <div class="pt-4">
+                    <div class="pt-4 space-y-2">
                         <button id="record-btn" onclick="recordShot()" ${isReadyToRecord() ? '' : 'disabled'} class="w-full py-5 rounded-2xl font-black text-xl shadow-lg transition-all ${isReadyToRecord() ? 'bg-teal-600 text-white active:scale-95' : 'bg-gray-300 text-gray-500'}">
-                            記 録
+                            ${state.editingShotIndex !== null ? '変更を保存' : '記 録'}
                         </button>
+                        ${state.editingShotIndex !== null ? `
+                            <button onclick="cancelEdit()" class="w-full py-3 bg-gray-200 text-gray-700 rounded-xl font-bold text-sm">
+                                編集をキャンセル
+                            </button>
+                        ` : ''}
                     </div>
+
+                    <!-- Shot History List in Record View -->
+                    ${hole.shots.length > 0 ? `
+                        <div class="bg-white p-4 rounded-2xl shadow-sm space-y-3">
+                            <h4 class="text-xs font-bold text-gray-400">このホールの記録</h4>
+                            <div class="divide-y divide-gray-100">
+                                ${hole.shots.map((s, idx) => `
+                                    <div class="py-3 flex items-center justify-between text-sm ${state.editingShotIndex === idx ? 'bg-amber-50/50 -mx-4 px-4' : ''}">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center gap-2">
+                                                <span class="font-bold text-teal-600">${s.shot_num}打目</span>
+                                                <span class="font-bold bg-teal-50 text-teal-700 px-2 py-0.5 rounded text-xs">${s.club}</span>
+                                                ${s.remaining_yards ? `<span class="text-gray-500 text-xs">${s.remaining_yards}yd</span>` : ''}
+                                            </div>
+                                            <div class="text-[11px] text-gray-500 mt-1 truncate">
+                                                ${s.lie ? `${s.lie}` : ''}${s.slope ? `(${s.slope})` : ''} / ${s.direction} / ${s.contact} / ${s.distance_feel}
+                                                ${s.penalty && s.penalty !== 'なし' ? ` / <span class="text-red-500 font-bold">${s.penalty}</span>` : ''}
+                                                ${s.memo ? ` / <span class="italic">"${s.memo}"</span>` : ''}
+                                            </div>
+                                        </div>
+                                        <div class="flex gap-2 ml-4">
+                                            <button onclick="editShot(${idx})" class="text-xs bg-gray-100 active:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg font-bold">編集</button>
+                                            <button onclick="deleteShot(${idx})" class="text-xs bg-red-50 active:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold">削除</button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
                 </main>
             `;
         }
@@ -343,6 +428,9 @@
         }
 
         function isReadyToRecord() {
+            if (isFirstShot()) {
+                return state.selectedClub && state.selectedDirection && state.selectedContact && state.selectedDistanceFeel;
+            }
             return state.selectedClub && state.selectedLie && state.selectedSlope && state.selectedDirection && state.selectedContact && state.selectedDistanceFeel;
         }
 
@@ -351,25 +439,94 @@
             const round = db.rounds.find(r => r.round_id === db.active_round_id);
             const hole = round.holes[state.currentHoleIndex];
             
-            const newShot = {
-                shot_num: hole.shots.length + 1,
-                remaining_yards: state.remainingYards,
-                club: state.selectedClub,
-                direction: state.selectedDirection,
-                contact: state.selectedContact,
-                distance_feel: state.selectedDistanceFeel,
-                penalty: state.selectedPenalty || 'なし',
-                lie: state.selectedLie,
-                slope: state.selectedSlope,
-                memo: state.memo
-            };
+            const firstShot = isFirstShot();
+            const lieVal = firstShot ? 'ティー' : state.selectedLie;
+            const slopeVal = firstShot ? '平坦' : state.selectedSlope;
 
-            hole.shots.push(newShot);
+            if (state.editingShotIndex !== null) {
+                // Edit existing shot
+                const shot = hole.shots[state.editingShotIndex];
+                shot.remaining_yards = state.remainingYards;
+                shot.club = state.selectedClub;
+                shot.direction = state.selectedDirection;
+                shot.contact = state.selectedContact;
+                shot.distance_feel = state.selectedDistanceFeel;
+                shot.penalty = state.selectedPenalty || 'なし';
+                shot.lie = lieVal;
+                shot.slope = slopeVal;
+                shot.memo = state.memo;
+                
+                showToast('ショットを更新しました');
+            } else {
+                // Add new shot
+                const newShot = {
+                    shot_num: hole.shots.length + 1,
+                    remaining_yards: state.remainingYards,
+                    club: state.selectedClub,
+                    direction: state.selectedDirection,
+                    contact: state.selectedContact,
+                    distance_feel: state.selectedDistanceFeel,
+                    penalty: state.selectedPenalty || 'なし',
+                    lie: lieVal,
+                    slope: slopeVal,
+                    memo: state.memo
+                };
+                hole.shots.push(newShot);
+                showToast('記録しました (' + hole.shots.length + '打目)');
+            }
+
             saveDB();
             resetInputState();
-            showToast('記録しました (' + hole.shots.length + '打目)');
             render();
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function editShot(idx) {
+            const round = db.rounds.find(r => r.round_id === db.active_round_id);
+            const hole = round.holes[state.currentHoleIndex];
+            const shot = hole.shots[idx];
+            
+            state.editingShotIndex = idx;
+            state.remainingYards = shot.remaining_yards || '';
+            state.selectedClub = shot.club;
+            state.selectedDirection = shot.direction;
+            state.selectedContact = shot.contact;
+            state.selectedDistanceFeel = shot.distance_feel;
+            state.selectedPenalty = shot.penalty || 'なし';
+            state.selectedLie = shot.lie;
+            state.selectedSlope = shot.slope;
+            state.memo = shot.memo || '';
+            state.showMemo = !!shot.memo;
+            
+            render();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function deleteShot(idx) {
+            if (confirm((idx + 1) + '打目の記録を削除しますか？')) {
+                const round = db.rounds.find(r => r.round_id === db.active_round_id);
+                const hole = round.holes[state.currentHoleIndex];
+                
+                hole.shots.splice(idx, 1);
+                // Re-index shots
+                hole.shots.forEach((s, i) => {
+                    s.shot_num = i + 1;
+                });
+                
+                saveDB();
+                if (state.editingShotIndex === idx) {
+                    resetInputState();
+                } else if (state.editingShotIndex > idx) {
+                    state.editingShotIndex--;
+                }
+                showToast('削除しました');
+                render();
+            }
+        }
+
+        function cancelEdit() {
+            resetInputState();
+            render();
         }
 
         function resetInputState() {
@@ -383,6 +540,7 @@
             state.remainingYards = '';
             state.memo = '';
             state.showMemo = false;
+            state.editingShotIndex = null;
         }
 
         function deleteRound(id) {
@@ -441,7 +599,7 @@
 
         // --- Initialize ---
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js?v=4')
+            navigator.serviceWorker.register('sw.js?v=5')
                 .then(reg => console.log('SW Registered'))
                 .catch(err => console.log('SW Error:', err));
         }
